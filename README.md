@@ -2,9 +2,9 @@
 This a set of small Perl scripts to build a catalog on a set of mountable
 backups, and to search the catalog.
 
-I have a set of five or six USB hard disk, which I've used over the years
-to backup my home and work systems. I've used various tools such as rsync,
-rsnapshot and a Btrfs tool to copy files over to the hard disks. Now I
+I have a set of five or six USB hard disks, which I've used over the years
+to backup my home and work systems. I've used various tools such as _rsync_,
+_rsnapshot_ and a Btrfs tool to copy files over to the hard disks. Now I
 have 100 million or so files out on several disks, and trying to find a file
 is becoming hard. Hence these scripts.
 
@@ -36,7 +36,7 @@ volume.
 As an example, here is one volume that I added to the database:
 
 ```
-$ ./add_volume apr2014 'Warrens Backups to April 2014' 'Study cupboard at home'
+$ ./add_volume apr2014 'Warrens Back Drive Data from June 2011 to April 2014' 'Study cupboard at home'
 ```
 
 The _-db_ option allows you to choose a different Sqlite3 database file
@@ -66,7 +66,7 @@ the volume name _fred_. To add all the files to the catalog, you would do:
 $ ./add_files fred /mountpoint
 ```
 
-This will print out decimal points `.` as the script enters a new directory.
+This will print out a decimal point `.` as the script enters a new directory.
 The script will also print out an asterisk `*` every 30 seconds, so that you
 get some other indication of progress.
 
@@ -90,7 +90,7 @@ down considerably.
 
 If you know specifically what has been added, it's easier to use the
 _startdir_ option at the end of the command-line. For example, assume
-that your volume is mounted on `/mountpoint' and that latest backup was
+that your volume is mounted on `/mountpoint` and that latest backup was
 placed at `/mountpoint/2017-April`. You would run the command:
 
 ```
@@ -106,7 +106,7 @@ and this took 5 or 6 hours to scan.
 
 # Size and Contents of the Catalog
 
-The catalog contains
+The catalog contains:
  * the full pathname of each file and directory
  * the size of each file and directory in bytes
  * the last modification timestamp for each file and directory
@@ -134,7 +134,7 @@ The command-line usage is:
 Usage: ./find_files [-e] [-r] [-db dbfile] pattern
 ```
 * _-e_ turns on exact matching
-* -r_ turns on regular expression matching
+* _-r_ turns on regular expression matching
 
 If you want to use regular expressions, you may need to install a version of
 Sqlite3 with a regular expression library. On Ubuntu:
@@ -212,11 +212,11 @@ $ ./find_files -r '[Cc]lex\.[ch]'
 Both searches took 1 minute 47 seconds.
 
 One important thing to note about searches is that the search pattern only applies to each component of the pathname, not the full pathname. So if you searched
-for 'a%b", it _won't_ find a pathname with _...a/b..._.
+for 'a%b', it _won't_ find a pathname with _...a/b..._.
 
 Similarly, a match on a directory name _won't_ list the contents below the
 directory, only the directory itself. If you search for the exact pattern
-_RCS_, then you will get results like this:
+_.git_, then you will get results like this:
 
 ```
 $ ./find_files -e .git
