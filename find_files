@@ -1,0 +1,80 @@
+#!/usr/bin/perl
+#
+# Search the database of files in the backups and return matches
+# (c) 2017 Warren TOomey, GPL3
+#
+use strict;
+use warnings;
+use Getopt::Long;
+use lib '.';
+use FileModel;
+
+# Cache of file ids and their full name
+# No name for the file-id zero
+my @Fullname;
+$Fullname[0] = '';
+
+# Given an id, a filename-id and the parent-id,
+# return a full filename for the file. Recursive
+# if the parent is not yet loaded
+sub getFullFilename {
+    my ( $id, $parentid, $filenameid ) = @_;
+
+    # Get the filename associated with the $filenameid
+    my $filename = dbGetFilename($filenameid) || 'ERR';
+
+    # Try to get the parent details. If missing, recurse
+    my $fullname;
+    if ( !defined( $Fullname[$parentid] ) ) {
+        my (@row) = dbGetFile($parentid);
+        $fullname =
+          getFullFilename( $row[0], $row[1], $row[2] ) . '/' . $filename;
+    }
+    else {
+        $fullname = $Fullname[$parentid] . '/' . $filename;
+    }
+
+    # Cache it for later
+    $Fullname[$id] = $fullname;
+    return ($fullname);
+}
+
+# Get any options
+my $dbfile;
+my $doexact   = 0;
+my $doregexp  = 0;
+my $howsearch = 1;
+
+GetOptions(
+    "e"    => \$doexact,
+    "r"    => \$doregexp,
+    "db=s" => \$dbfile
+) || die("Usage: $0 [-e] [-r] [-db dbfile] pattern\n");
+
+die("Usage: $0 [-e] [-r] [-db dbfile] pattern\n") if ( @ARGV != 1 );
+my ($pattern) = @ARGV;
+
+dbOpenDatabase($dbfile);
+
+# Get the list of matching file-ids
+$howsearch = 0 if ($doexact);
+$howsearch = 2 if ($doregexp);
+my $idlist = dbSearchFile( $pattern, $howsearch );
+
+# Process each one
+foreach my $aref ( @{$idlist} ) {
+    my $id = $aref->[0];
+
+    # Get the file's details
+    # 0   1       2       3      4
+    # id,parent,filename,size,timestamp
+    my (@row) = dbGetFile($id);
+
+    my $tim = localtime( $row[4] );
+    my $full = getFullFilename( $row[0], $row[1], $row[2] );
+
+    printf( "%10d  %s  %s\n", $row[3], $tim, $full );
+}
+
+dbCloseDatabase();
+exit(0);

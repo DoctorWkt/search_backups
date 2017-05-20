@@ -1,0 +1,19 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Getopt::Long;
+use lib '.';
+use FileModel;
+
+# Get any optional arguments
+my $dbfile;
+GetOptions( "db=s" => \$dbfile )
+  || die("Usage: $0 [-db dbfile] volume_name description location\n");
+
+die("Usage: $0 [-db dbfile] volume_name description location\n")
+  if ( @ARGV != 3 );
+dbOpenDatabase($dbfile);
+my $id = dbAddVolume(@ARGV);
+die("Unable to insert $ARGV[0]\n") if ( !defined($id) );
+dbCloseDatabase();
+exit(0);

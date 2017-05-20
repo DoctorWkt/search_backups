@@ -1,0 +1,3 @@
+#!/bin/sh
+echo 'select * from volume;' | sqlite3 files.db
+exit 0

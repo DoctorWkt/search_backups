@@ -1,0 +1,162 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use File::Find;
+use Path::Class;
+use Getopt::Long;
+use Data::Dumper;
+use lib '.';
+use FileModel;
+
+my @Parent;    # Stack of directory ids
+my $ismountpt = 1;    # True for first dir, zero after that
+
+# Get any optional arguments
+my $dbfile;
+my $verbose    = 0;    # Run verbosely
+my $skipdupdir = 0;    # Skip duplicate directories
+GetOptions(
+    "v"    => \$verbose,
+    "s"    => \$skipdupdir,
+    "db=s" => \$dbfile
+  )
+  || die(
+    "Usage: $0 [-v] [-s] [-db dbfile] volume_name mountpoint [startdir]\n");
+
+# Get the arguments after checking the number of args
+die("Usage: $0 [-v] [-s] [-db dbfile] volume_name mountpoint [startdir]\n")
+  if ( ( @ARGV < 2 ) || ( @ARGV > 3 ) );
+my ( $volname, $mountpt, $startdir ) = @ARGV;
+
+# Get the volume's id
+dbOpenDatabase($dbfile);
+my $volid = dbGetVolumeId($volname);
+die("Unknown volume name: $volname\n") if ( !$volid );
+
+# Check that the mount point exists and is a directory
+die("$mountpt is not a directory\n") if ( !-d $mountpt );
+
+# Add the volume as the top directory
+# Make the volume the parent for the mount point
+my ( $vid, $dupcheck ) = dbAddFile( $volname, 0, 0, 0, 1 );
+unshift( @Parent, $vid );
+
+# We don't have a startdir
+if ( !defined($startdir) ) {
+
+    # Make the mount point the startdir
+    $startdir = $mountpt;
+}
+else {
+
+    # We do have a startdir. Check that it is under the mountpoint
+    die("startdir $startdir not under $mountpt\n")
+      if ( !( $startdir =~ m{^$mountpt} ) );
+
+    # We ned to skip duplicates
+    $skipdupdir = 1;
+
+    # Strip the mountpoint from the startdir
+    my $start = $startdir;
+    $start =~ s{^$mountpt(/)?}{};
+    $start =~ s{/$}{};
+
+    # Walk down the path to find the directory's file-id and parent-id
+    foreach my $level ( split( m{/}, $start ) ) {
+        print("level is $level, parent is $Parent[0]\n") if ($verbose);
+
+        # Check that this level is already in the database
+        my $levelid = dbExistsFile( $level, $Parent[0] );
+        die("$level not already in the database\n") if ( !$levelid );
+        print("  got $levelid for $level\n") if ($verbose);
+        unshift( @Parent, $levelid );
+    }
+}
+
+# Start autoflushing stdout
+$| = 1;
+
+# Now start adding the subdirs and files to the database
+find(
+    {
+        wanted      => \&process,
+        preprocess  => \&enterdir,
+        postprocess => \&leavedir,
+    },
+    $startdir
+);
+
+dbCloseDatabase();
+print("\n");
+exit(0);
+
+### SUBROUTINES ###
+sub enterdir {
+
+    # Don't do anything for the first directory as it is the mount point
+    if ($ismountpt) { $ismountpt = 0; return (@_); }
+
+    my $longdir  = $File::Find::dir;
+    my $shortdir = $_;
+    my $parent   = $Parent[0];
+
+    # Get the dir's size and timestamp
+    my ( undef, undef, undef, undef, undef, undef, undef, $size, undef, $mtime )
+      = stat($longdir);
+
+    # Add the directory to the database
+    my ( $dirid, $isdup ) =
+      dbAddFile( $shortdir, $parent, $size, $mtime, $dupcheck );
+
+    # Skip this directory if necessary
+    if ( $skipdupdir && $isdup ) {
+        unshift( @Parent, $dirid );    # Push junk, will be popped later
+        print("Skipping $longdir\n") if ($verbose);
+
+        # Build a list of directories, so that we can traverse them,
+        # but discard all the rest from consideration
+        my @dirlist;
+        foreach my $x (@_) {
+            next if ( $x eq '.' );
+            next if ( $x eq '..' );
+            push( @dirlist, $x ) if ( -d "$longdir/$x" );
+        }
+
+        print(".");
+        return (@dirlist);
+    }
+
+    # Make this directory the parent for the following files
+    unshift( @Parent, $dirid );
+    print("Enter $dirid $parent $shortdir $longdir $size $mtime\n")
+      if ($verbose);
+    print(".");
+    return (@_);
+}
+
+sub leavedir {
+    my $dir = $File::Find::dir;
+    print("Leave $dir\n") if ($verbose);
+
+    # This dir is no longer the parent
+    shift(@Parent);
+}
+
+# The code that actually does the work for each file
+sub process {
+
+    # Skip a bunch of things that are not files
+    my $longfile  = $File::Find::name;
+    my $shortfile = $_;
+    return if ( !-f $longfile );
+    my $parent = $Parent[0];
+
+    # Get the file's size and timestamp
+    my ( undef, undef, undef, undef, undef, undef, undef, $size, undef, $mtime )
+      = stat($longfile);
+
+    # Add the file to the database
+    my ($fileid) = dbAddFile( $shortfile, $parent, $size, $mtime, $dupcheck );
+    print("Process $fileid $parent $shortfile $longfile $size $mtime\n")
+      if ($verbose);
+}
